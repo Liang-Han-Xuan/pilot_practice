@@ -1,0 +1,848 @@
+
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-music@5.0.3/files/noto-music-all-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face{font-family:'NotoMusic';src:url('https://cdn.jsdelivr.net/npm/@fontsource/noto-music@5.0.3/files/noto-music-all-400-normal.woff2') format('woff2');font-display:swap}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:transparent;padding:14px;color:#222;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;box-sizing:border-box;}
+.score-wrap{background:#ffffff;border:1.5px solid #ffffff;border-radius:10px 10px 0 0;padding:20px 0 36px;margin-bottom:0;position:relative;width:fit-content;}
+/* 預備拍圓點：無底色無邊框 */
+#prep-row{
+  background:none;border:none;
+  display:flex;gap:12px;justify-content:center;align-items:center;
+  min-height:26px;visibility:hidden;
+  position:absolute;top:4px;left:50%;transform:translateX(-50%);
+  pointer-events:none;
+}
+.pdot{width:11px;height:11px;border-radius:50%;background:#ddd;transition:background .06s;}
+.pdot.active{background:#4caf50;}
+
+#status-bar{background:#6b4fa0;border-radius:15px;padding:12px 16px;display:flex;align-items:center;margin-bottom:10px;cursor:pointer;user-select:none;min-height:52px;box-sizing:border-box;justify-content:center;text-align:center;}
+#status-bar.recording{box-shadow:0 0 0 2px #9b6fd4;}
+#status-bar.done{background:#999;cursor:default;pointer-events:none;}
+#status-bar.done-next{background:#f0a030;cursor:pointer;pointer-events:auto;}
+#status-bar.done-next.locked{background:#bbb;cursor:not-allowed;pointer-events:none;}
+.ts-box{color:white;font-size:19px;font-weight:900;line-height:1.05;display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+.ts-label{color:white;font-size:17px;font-weight:700;text-align:center;width:100%}
+.ctrl-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.ctrl-label{font-size:12px;color:#555;font-weight:700;min-width:36px}
+input[type=range]{flex:1;min-width:100px;accent-color:#6b4fa0;cursor:pointer}
+.ctrl-val{font-size:13px;font-weight:700;color:#6b4fa0;min-width:54px}
+.bar-ctrl{display:flex;align-items:center}
+.bar-btn{width:30px;height:30px;border-radius:6px;border:1.5px solid #6b4fa0;background:#fff;color:#6b4fa0;font-size:18px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.bar-btn:hover{background:#ede7f6}
+.bar-num{width:38px;height:30px;text-align:center;line-height:30px;font-size:16px;font-weight:900;color:#888;background:transparent;border:none;user-select:none}
+.controls{display:flex;gap:10px;align-items:center;margin-top:7px}
+.btn{border:none;border-radius:8px;padding:9px 13px;font-size:13px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;transition:transform .1s;outline:none}
+.btn:active{transform:scale(0.95)}
+.btn-next{background:#f0a030;color:white}
+.btn-retry{background:#4a7cc9;color:white}
+.btn-lbl{font-size:9px;opacity:.75;margin-top:1px}
+.key-hint{background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;padding:7px 14px;text-align:center;font-size:11px;color:#999;margin-top:8px}
+kbd{background:#fff;border:1px solid #ccc;border-radius:4px;padding:1px 5px;font-size:11px;color:#444}
+.switches{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:9px}
+.sw-btn{border:none;border-radius:16px;padding:5px 15px;font-size:12px;font-weight:700;cursor:pointer;user-select:none;outline:none}
+.sw-btn[data-on="true"]{background:#4caf50!important;color:#fff!important}
+.sw-btn[data-on="false"]{background:#9e9e9e!important;color:#fff!important}
+#play-answer-btn{
+  visibility:hidden;
+  position:absolute;bottom:8px;right:10px;
+  border:none;background:#4a7cc9;color:#fff;
+  border-radius:7px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;
+  box-shadow:0 2px 6px rgba(74,124,201,0.4);
+  transition:background .15s;
+}
+#play-answer-btn:hover:not(:disabled){background:#3a6ab8;}
+#play-answer-btn:disabled{background:#9e9e9e;cursor:not-allowed;box-shadow:none;}
+#my-recording-btn{
+  visibility:hidden;
+  position:absolute;bottom:8px;right:108px;
+  border:none;background:#4caf50;color:#fff;
+  border-radius:7px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;
+  box-shadow:0 2px 6px rgba(76,175,80,0.4);
+  transition:background .15s;
+}
+#my-recording-btn:hover:not(:disabled){background:#43a047;}
+#my-recording-btn:disabled{background:#9e9e9e;cursor:not-allowed;box-shadow:none;}
+</style>
+</head>
+<body>
+<div id="gear-btn" onclick="toggleSettings()" style="position:fixed;top:14px;left:14px;z-index:1000;width:36px;height:36px;border-radius:50%;background:rgba(200,200,200,0.25);color:#aaa;font-size:20px;display:flex;align-items:center;justify-content:center;cursor:pointer;">⚙️</div>
+<div id="settings-panel" style="display:none;position:fixed;top:56px;left:14px;z-index:999;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);padding:16px;min-width:260px;">
+  <div class="switches">
+    <button class="sw-btn" data-on="true"  data-key="live"        onclick="toggleSw(this)">G1</button>
+    <button class="sw-btn" data-on="false" data-key="syncsummary" onclick="toggleSw(this)">G2</button>
+    <button class="sw-btn" data-on="false" data-key="summary"     onclick="toggleSw(this)">G3</button>
+  </div>
+  <div class="ctrl-row">
+    <span class="ctrl-label">BPM</span>
+    <input type="range" id="bpm-slider" min="40" max="160" value="70" oninput="onBpmChange(this.value)">
+    <span class="ctrl-val" id="bpm-val">70 BPM</span>
+  </div>
+  <div class="ctrl-row">
+    <span class="ctrl-label">小節數</span>
+    <button class="bar-btn" onclick="changeBars(-1)">−</button>
+    <div class="bar-num" id="bar-num">2</div>
+    <button class="bar-btn" onclick="changeBars(1)">+</button>
+    <span style="font-size:11px;color:#aaa;margin-left:6px" id="bar-hint">2 小節</span>
+  </div>
+  <div class="ctrl-row" style="flex-direction:column;align-items:flex-start;gap:4px;margin-top:8px;padding-top:10px;border-top:1px solid #eee;">
+    <span class="ctrl-label" style="margin-bottom:2px;">自訂題目（JSON 檔）</span>
+    <input type="file" id="custom-q-input" accept="application/json,.json" onchange="loadCustomQuestions(this.files[0])" style="font-size:12px;max-width:230px;">
+    <div id="custom-q-status" style="font-size:11px;color:#888;">目前：預設題組「習得階段題目」（共 6 題）</div>
+    <button id="custom-q-clear" onclick="clearCustomQuestions()" style="display:inline-block;font-size:12px;padding:4px 10px;border-radius:6px;border:1.5px solid #6b4fa0;background:#fff;color:#6b4fa0;cursor:pointer;margin-top:2px;">回到隨機出題</button>
+  </div>
+</div>
+<div id="subject-entry" style="background:#fff;border-radius:14px;box-shadow:0 4px 20px rgba(0,0,0,0.08);padding:32px 28px;display:flex;flex-direction:column;align-items:center;gap:14px;min-width:260px;">
+  <div style="font-size:16px;font-weight:700;color:#333;">組別</div>
+  <select id="group-select" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;border:1.5px solid #ddd;border-radius:8px;background:#fff;">
+    <option value="">請選擇組別</option>
+    <option value="G1">G1</option>
+    <option value="G2">G2</option>
+    <option value="G3">G3</option>
+  </select>
+  <div style="font-size:16px;font-weight:700;color:#333;">受試者編號</div>
+  <input type="text" id="subject-id-input" placeholder="請輸入受試者編號" style="width:100%;box-sizing:border-box;padding:9px 12px;font-size:14px;border:1.5px solid #ddd;border-radius:8px;">
+  <button onclick="startTest()" style="width:100%;border:none;background:#6b4fa0;color:#fff;border-radius:8px;padding:11px 0;font-size:15px;font-weight:700;cursor:pointer;">練習開始</button>
+</div>
+<div id="test-area" style="display:none;flex-direction:column;">
+<div class="score-wrap">
+  <svg id="score" style="display:block;overflow:visible;margin:0 auto"></svg>
+  <div id="prep-row">
+    <div class="pdot" id="pd0"></div><div class="pdot" id="pd1"></div>
+    <div class="pdot" id="pd2"></div><div class="pdot" id="pd3"></div>
+  </div>
+  <button id="my-recording-btn" onclick="playMyRecording()">🎙 我的錄音</button>
+  <button id="play-answer-btn" onclick="playAnswer()">▶ 正確答案</button>
+</div>
+<div id="finish-msg" style="display:none;color:#000;font-weight:700;font-size:20px;text-align:center;margin-bottom:10px;">練習結束，靜待研究人員指示</div>
+<div id="metacog-prompt" style="display:none;font-size:18px;font-weight:700;color:#000;text-align:center;margin:0 auto 12px;max-width:520px;">⚠️注意各個回饋是偏早還是偏晚？</div>
+<div id="status-bar" onclick="handleTap()">
+  <div class="ts-label" id="status-label">按空白鍵開始</div>
+</div>
+<div id="csv-download-row" style="display:none;margin-top:10px;text-align:center;">
+  <button id="csv-download-btn" onclick="downloadSessionCSV()" style="background:none;border:1.5px solid #6b4fa0;color:#6b4fa0;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;">⬇ 下載本機備份 CSV</button>
+  <button id="tapdetail-download-btn" onclick="downloadTapDetailCSV()" style="background:none;border:1.5px solid #6b4fa0;color:#6b4fa0;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px;">⬇ 下載拍點明細 CSV</button>
+</div>
+</div>
+<script>
+const COLOR_GREEN=60,COLOR_YELLOW=150;
+/* 預設題組：習得階段題目.json 的內容，作為本頁預設載入的題目（取代原本的隨機出題預設值）。
+   仍可透過設定面板的「自訂題目（JSON 檔）」載入其他題組覆蓋，或按「回到隨機出題」切換回隨機模式。 */
+const DEFAULT_QUESTION_SET={
+  "name":"習得階段題目",
+  "questions":[
+    { "bars": ["4 4 0 4", "0 0 4 4"] },
+    { "bars": ["4 4 4 88", "4 88 4 88"] },
+    { "bars": ["4 0 88 88", "4 88 0 88"] },
+    { "bars": ["88 4 4 88", "0 4 88 4"] },
+    { "bars": ["0 88 88 0", "88 88 4 88"] },
+    { "bars": ["88 0 88 4", "0 88 4 4"] }
+  ]
+};
+const AC=window.AudioContext||window.webkitAudioContext;
+let ac,metroNodes=[],recDest=null,mediaRec=null,recChunks=[],lastRecordingBlob=null,lastRecordingURL=null;
+function getAC(){if(!ac){ac=new AC();recDest=ac.createMediaStreamDestination();}return ac;}
+// 確保 AudioContext 真的已經開始運作（state==='running'）才 resolve。
+// 剛建立或剛從 suspended 喚醒的 AudioContext，音訊硬體通常需要一小段暖機時間才會真的發出聲音，
+// 但這段延遲不會反映在 a.currentTime 上；若沒等它跑穩就直接用 currentTime 排程聲音與畫面，
+// 聲音會比用系統時鐘（setTimeout）排程的畫面（例如預備拍綠點）晚一點點，造成對不齊。
+function ensureRunning(){const a=getAC();return a.state==='suspended'?a.resume():Promise.resolve();}
+function beep(freq,t,vol,track=true){const a=getAC(),o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);g.connect(recDest);o.frequency.value=freq;g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.07);o.start(t);o.stop(t+0.09);if(track)metroNodes.push(o);}
+function clap(t){const a=getAC(),len=Math.floor(a.sampleRate*0.13);const buf=a.createBuffer(1,len,a.sampleRate),d=buf.getChannelData(0);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.2);const src=a.createBufferSource();src.buffer=buf;const bp=a.createBiquadFilter();bp.type='bandpass';bp.frequency.value=1200;bp.Q.value=0.6;const g=a.createGain();g.gain.setValueAtTime(0.65,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.11);src.connect(bp);bp.connect(g);g.connect(a.destination);g.connect(recDest);src.start(t);src.stop(t+0.13);}
+function startRecording(){
+  getAC();
+  if(!recDest)return;
+  recChunks=[];
+  const mimeType=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':
+                  MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'audio/ogg';
+  try{mediaRec=new MediaRecorder(recDest.stream,{mimeType});}catch(e){mediaRec=new MediaRecorder(recDest.stream);}
+  mediaRec.ondataavailable=e=>{if(e.data&&e.data.size>0)recChunks.push(e.data);};
+  mediaRec.onstop=()=>{
+    if(lastRecordingURL)URL.revokeObjectURL(lastRecordingURL);
+    const mime=mediaRec.mimeType||'audio/webm';
+    lastRecordingBlob=new Blob(recChunks,{type:mime});
+    lastRecordingURL=URL.createObjectURL(lastRecordingBlob);
+    showMyRecordingBtn(true);
+  };
+  mediaRec.start(100);
+}
+function stopRecording(){
+  if(mediaRec&&mediaRec.state!=='inactive'){mediaRec.stop();}
+}
+function stopMetro(){metroNodes.forEach(o=>{try{o.stop(getAC().currentTime);}catch(e){}});metroNodes=[];}
+
+// 每拍三種可能：四分音符、四分休止符、兩個八分音符
+function genBeat(beatPos){
+  const r=Math.random();
+  if(r<0.33) return [{b:beatPos,d:1,r:0}];
+  if(r<0.55) return [{b:beatPos,d:1,r:1}];
+  return [{b:beatPos,d:0.5,r:0},{b:beatPos+0.5,d:0.5,r:0}];
+}
+function genBar(){
+  const notes=[];
+  for(let beat=0;beat<4;beat++) genBeat(beat).forEach(n=>notes.push(n));
+  return notes;
+}
+
+/* ---- 自訂題目：每個小節用 4 個空白分隔的拍子代碼描述 ----
+   4  = 四分音符
+   0  = 四分休止符
+   88 = 兩個八分音符
+   檔案格式（JSON）：
+   { "name": "題組名稱", "questions": [ { "bars": ["88 4 0 4", "4 88 4 0"] }, ... ] }
+   每題的 bars 陣列，一個字串代表一個小節，各小節可以有不同數量。 */
+function parseBarCode(code){
+  const tokens=String(code).trim().split(/\s+/);
+  if(tokens.length!==4)throw new Error('每個小節需要剛好 4 個拍子代碼（4 / 0 / 88），但收到「'+code+'」（'+tokens.length+' 個代碼）');
+  const notes=[];
+  tokens.forEach((tok,beat)=>{
+    const t=tok.trim();
+    if(t==='4')notes.push({b:beat,d:1,r:0});
+    else if(t==='0')notes.push({b:beat,d:1,r:1});
+    else if(t==='88'){notes.push({b:beat,d:0.5,r:0});notes.push({b:beat+0.5,d:0.5,r:0});}
+    else throw new Error('無法辨識的拍子代碼「'+tok+'」（只接受 4 / 0 / 88）');
+  });
+  return notes;
+}
+function parseCustomFile(data){
+  if(!data||!Array.isArray(data.questions)||data.questions.length===0)throw new Error('檔案需要有 "questions" 陣列，且至少一題');
+  return data.questions.map((q,qi)=>{
+    if(!q||!Array.isArray(q.bars)||q.bars.length===0)throw new Error('第 '+(qi+1)+' 題缺少 "bars" 陣列，或是空的');
+    return q.bars.map(parseBarCode);
+  });
+}
+function loadCustomQuestions(file){
+  if(!file)return;
+  if(phase==='preparing'||phase==='recording'){alert('請先完成目前這一題，再載入自訂題目。');document.getElementById('custom-q-input').value='';return;}
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const data=JSON.parse(reader.result);
+      const parsed=parseCustomFile(data);
+      customQuestions=parsed;
+      customSetName=data.name||file.name;
+      SESSION_TOTAL=parsed.length;
+      document.getElementById('custom-q-status').textContent='目前：自訂題組「'+customSetName+'」（共 '+parsed.length+' 題）';
+      document.getElementById('custom-q-clear').style.display='inline-block';
+      setBarStepperEnabled(false);
+      sessionLog=[];questionCount=0;tapDetailLog=[];
+      reset();buildSeq();renderScore();markQuestionShown();
+    }catch(e){
+      alert('題目檔案載入失敗：\n'+e.message);
+      console.error('loadCustomQuestions error',e);
+    }
+    document.getElementById('custom-q-input').value='';
+  };
+  reader.onerror=()=>{alert('檔案讀取失敗，請再試一次。');};
+  reader.readAsText(file);
+}
+function clearCustomQuestions(){
+  customQuestions=null;customSetName='';
+  SESSION_TOTAL=DEFAULT_SESSION_TOTAL;
+  document.getElementById('custom-q-status').textContent='目前：隨機出題';
+  document.getElementById('custom-q-clear').style.display='none';
+  setBarStepperEnabled(true);
+  sessionLog=[];questionCount=0;tapDetailLog=[];
+  reset();buildSeq();renderScore();markQuestionShown();
+}
+function setBarStepperEnabled(enabled){
+  document.querySelectorAll('.bar-btn').forEach(b=>{b.disabled=!enabled;b.style.opacity=enabled?'1':'0.35';b.style.cursor=enabled?'pointer':'not-allowed';});
+}
+
+let BARS=2,BPM=70,BEAT=60/BPM,curBars=[],totalBeats=8;
+function buildSeq(){
+  if(customQuestions&&customQuestions.length>0){
+    // 只要載入了自訂題組，這個 session 就完全按照題組出題，
+    // 絕對不會退回隨機出題——即使索引意外超出範圍，也是夾在最後一題，而不是生成隨機題目。
+    const idx=Math.min(questionCount,customQuestions.length-1);
+    curBars=customQuestions[idx];
+    BARS=curBars.length;
+    document.getElementById('bar-num').textContent=BARS;
+    document.getElementById('bar-hint').textContent=BARS+' 小節（自訂）';
+    totalBeats=BARS*4;
+    return;
+  }
+  curBars=[];totalBeats=BARS*4;for(let i=0;i<BARS;i++){curBars.push(genBar());}
+}
+function globalSeq(){const s=[];curBars.forEach((bar,bi)=>bar.forEach(n=>s.push({b:n.b+bi*4,d:n.d,r:n.r})));return s;}
+function toggleSettings(){const p=document.getElementById('settings-panel');p.style.display=p.style.display==='none'?'block':'none';}
+function onBpmChange(v){BPM=parseInt(v);BEAT=60/BPM;document.getElementById('bpm-val').textContent=BPM+' BPM';}
+function changeBars(d){const n=Math.max(1,BARS+d);if(n===BARS)return;BARS=n;document.getElementById('bar-num').textContent=BARS;document.getElementById('bar-hint').textContent=BARS+' 小節';if(phase!=='preparing'&&phase!=='recording'){reset();buildSeq();renderScore();markQuestionShown();}}
+
+function buildRanges(seq,beat){return seq.map((e,i)=>{const idealT=e.b*beat,prev=seq[i-1],prevB=prev?prev.b:e.b-1,next=seq[i+1];const L=(prevB*beat+idealT)/2;const R=next?(idealT+next.b*beat)/2:idealT+e.d*beat/2;return{...e,idx:i,idealT,L,R};});}
+function matchAll(seq,hits,beat){
+  const evts=buildRanges(seq,beat),notes=evts.filter(e=>!e.r),rests=evts.filter(e=>e.r);
+  const hs=hits.map(h=>({t:h,done:false,result:null,ni:-1,diff:null,color:null,ord:0}));
+  hs.forEach(h=>{const rm=rests.find(r=>h.t>=r.L&&h.t<r.R);if(rm){h.done=true;h.result='FA';h.color='#e24b4a';h.ord=rm.idx;}});
+  const nws=notes.map(n=>({...n,done:false,result:null,diff:null,abs:null,barIdx:Math.floor(n.b/4)}));
+  hs.filter(h=>!h.done).forEach(h=>{
+    let bi=-1,biAny=-1;
+    nws.forEach((w,i)=>{
+      if(h.t>=w.L&&h.t<w.R){
+        biAny=i; // 這個拍擊實際落在哪個音符的判定窗（不管那個窗有沒有已經被別的拍擊佔用），畫圖用
+        if(!w.done&&bi===-1)bi=i; // 真正可以拿來計分（Hit/紅色FA）的候選：該窗還沒被用過
+      }
+    });
+    if(bi>=0){const w=nws[bi],diff=Math.round((h.t-w.idealT)*1000),abs=Math.abs(diff);h.done=true;h.ni=bi;h.ord=w.idx;h.diff=diff;w.done=true;w.diff=diff;w.abs=abs;w.result='Hit';const col=abs<COLOR_GREEN?'#4caf50':(abs<COLOR_YELLOW?'#f0a030':'#e24b4a');h.result='Hit';h.color=col;} // 落在尚未配對過的音符判定窗內 → 一律算 TP（不論誤差多大），顏色分級純粹是畫面呈現，不影響判定
+    else if(biAny>=0){h.done=true;h.result='FA';h.color='#e24b4a';h.ord=nws[biAny].idx;} // 落在某個音符窗裡，但那個窗已經被更早的拍擊用掉了——不計分，但畫圖仍歸屬到它真正落在的那個窗，不會流竄到別的窗
+    else{h.done=true;h.result='FA';h.color='#e24b4a';h.ord=h.t<evts[0].L?-1:evts.length;} // 完全落在所有判定窗之外（極罕見的邊界情況），排在最前或最後
+  });
+  nws.forEach(w=>{if(!w.done)w.result='Miss';});
+  const Hit=nws.filter(w=>w.result==='Hit').length;
+  const Miss=nws.filter(w=>w.result==='Miss').length,FA=hs.filter(h=>h.result==='FA').length;
+  const P=(Hit+FA)>0?Hit/(Hit+FA):0,R=(Hit+Miss)>0?Hit/(Hit+Miss):0,F=P+R>0?2*P*R/(P+R):0;
+  const hitNotes=nws.filter(w=>w.result==='Hit');
+  const MAE=hitNotes.length>0?Math.round(hitNotes.reduce((a,w)=>a+w.abs,0)/hitNotes.length):null;
+  const barStats=Array.from({length:BARS},(_,bi)=>{
+    const bn=nws.filter(w=>w.barIdx===bi);
+    const bH=bn.filter(w=>w.result==='Hit').length,bM=bn.filter(w=>w.result==='Miss').length;
+    const bs_=bi*4*beat,be=(bi+1)*4*beat;
+    const bFA=hs.filter(h=>h.result==='FA'&&h.t>=bs_-beat*0.4&&h.t<be+beat*0.4).length;
+    const tot=bH+bM,bR=tot>0?bH/tot:0,bP=(bH+bFA)>0?bH/(bH+bFA):0,bF=bP+bR>0?2*bP*bR/(bP+bR):0;
+    const bhn=bn.filter(w=>w.result==='Hit');
+    const bMAE=bhn.length>0?Math.round(bhn.reduce((a,w)=>a+w.abs,0)/bhn.length):null;
+    return{H:bH,EL:0,M:bM,FA:bFA,F:bF,MAE:bMAE};
+  });
+  return{nws,hs,Hit,Miss,FA,P,R,F,MAE,barStats,evts};
+}
+
+const SW={live:true,summary:false,syncsummary:false};
+function toggleSw(btn){
+  const k=btn.dataset.key;
+  if(SW[k])return; // 已經選中的再點一次不做事，三選一必須恆有一個被選中
+  Object.keys(SW).forEach(key=>SW[key]=(key===k));
+  document.querySelectorAll('.switches .sw-btn').forEach(b=>b.setAttribute('data-on',String(SW[b.dataset.key])));
+  if(phase==='done'){const showFb=SW.summary||SW.syncsummary;if(showFb&&lastMatchResult)drawAll(lastMatchResult);else clearFb();}
+}
+
+let phase='idle',taskStartTime=0,userHits=[],lastMatchResult=null;
+let fbIds=[],missTimers=[],fbEvents=[];
+let myRecFirstDone=false,answerFirstDone=false,audioBusy=false;
+let myRecExtraClicks=0,answerExtraClicks=0,reviewStartTime=null;
+let recordedBeat=BEAT,recordedTotalBeats=totalBeats;
+const LAYOUT={Y:0,L:0,R:0,SW:0,IP:0};
+let SESSION_TOTAL=3;
+const DEFAULT_SESSION_TOTAL=SESSION_TOTAL; // 回到隨機出題時用來還原題數
+let customQuestions=null; // 載入自訂題目後：[[bar0Notes,bar1Notes,...], ...]，每一項對應一題
+let customSetName='';
+let sessionLog=[];let questionCount=0;
+let tapDetailLog=[]; // 每一題「每一個拍點」的分類(準/快/慢/多打/Miss)與時間差(ms)
+let subjectId='';
+let groupId='';
+let questionShownAt=0; // 題目（樂譜）顯示在畫面上的時間點（performance.now()），用來計算反應時間
+let curReactionMs=null; // 這一題「顯示到按空白鍵開始」的反應時間（ms），每題結束寫進 CSV 後歸零
+function markQuestionShown(){questionShownAt=performance.now();showMetacog(SW.live);} // G1：樂譜顯示後就直接出現
+// === 雲端上傳設定 ===
+// 把 Apps Script 部署後拿到的網址（結尾是 /exec）貼在這裡，例如：
+// 'https://script.google.com/macros/s/AKfycb.../exec'
+// 留空字串 '' 則不會嘗試上傳。
+const GOOGLE_SHEET_WEBHOOK_URL='https://script.google.com/macros/s/AKfycbxxOBVU09kBnhpV0PwSFoN39j1FmkFxb_P09-EZbJxpCQ8plTFMBV21ZXzZaK4kSXwT/exec';
+let endTmr=null,prepTmr=null;
+const pdots=[0,1,2,3].map(i=>document.getElementById('pd'+i));
+
+function setSt(t){document.getElementById('status-label').textContent=t;}
+function setBar(rec){document.getElementById('status-bar').className=rec?'recording':'';}
+function showPrepRow(v){document.getElementById('prep-row').style.visibility=v?'visible':'hidden';}
+function showMetacog(v){document.getElementById('metacog-prompt').style.display=v?'block':'none';}
+function flashDot(i){pdots.forEach(d=>d.classList.remove('active'));if(i>=0)pdots[i].classList.add('active');}
+function showAnswerBtn(v){
+  const btn=document.getElementById('play-answer-btn');
+  btn.style.visibility=v?'visible':'hidden';
+  btn.disabled=true; // 預設鎖住，等我的錄音播完才解鎖
+  btn.textContent='▶ 正確答案';
+}
+function showMyRecordingBtn(v){
+  const btn=document.getElementById('my-recording-btn');
+  btn.style.visibility=v?'visible':'hidden';
+  btn.disabled=false;
+  btn.textContent='🎙 我的錄音';
+}
+/* 依目前「我的錄音／正確答案」是否都已聽過第一次，重新決定兩顆按鈕的鎖定狀態。
+   規則：我的錄音聽過一次但正確答案還沒聽過 → 我的錄音鎖住，逼受試者先去聽正確答案；
+   正確答案要等我的錄音聽過一次才解鎖；兩邊都聽過一次後，才可以自由重複播放任一邊。 */
+function syncPlaybackButtons(){
+  if(audioBusy)return;
+  const myBtn=document.getElementById('my-recording-btn');
+  const ansBtn=document.getElementById('play-answer-btn');
+  myBtn.disabled=myRecFirstDone&&!answerFirstDone;
+  ansBtn.disabled=!myRecFirstDone;
+}
+/* 「下一題／點此結束練習」按鈕的鎖定狀態：播放音檔期間、或「我的錄音」「正確答案」
+   還沒各聽過一次時，都維持鎖定樣式（灰色、不能按），避免受試者提早跳題。 */
+function refreshNextBtnLock(){
+  const locked=audioBusy||!(myRecFirstDone&&answerFirstDone);
+  document.getElementById('status-bar').classList.toggle('locked',locked);
+}
+
+function startTest(){
+  const input=document.getElementById('subject-id-input');
+  const id=input.value.trim();
+  if(!id){alert('請輸入受試者編號');input.focus();return;}
+  const groupSelect=document.getElementById('group-select');
+  const group=groupSelect.value;
+  if(!group){alert('請選擇組別');groupSelect.focus();return;}
+  subjectId=id;
+  groupId=group;
+  document.getElementById('subject-entry').style.display='none';
+  document.getElementById('test-area').style.display='flex';
+  markQuestionShown(); // 第一題的樂譜在此刻才真正顯示給受試者看，從這裡開始計反應時間
+  setSt('按空白鍵開始'); // 先顯示題目，等學習者自己按空白鍵才真正開始第一題，避免措手不及
+  ensureRunning(); // 提早（趁這個真人手勢）建立並喚醒 AudioContext，讓它在受試者按空白鍵前就先暖機完成，
+                    // 避免第一題的預備拍聲音因為 AudioContext 剛啟動而落後於綠點畫面
+}
+
+function handleTap(){
+  if(audioBusy)return; // 播放「我的錄音」/「正確答案」期間，空白鍵一律不處理
+  if(phase==='idle'){start();}
+  else if(document.getElementById('status-bar').classList.contains('done-next')){
+    if(document.getElementById('status-bar').classList.contains('locked'))return; // 我的錄音／正確答案還沒各聽過一次，不能跳題
+    newQuestion();
+  }
+  else if(phase==='recording'||(phase==='preparing'&&ac&&ac.currentTime>=taskStartTime-BEAT/2)){onHit();}
+}
+
+/* 用 capture 階段掛在 document 上，確保無論當下鍵盤焦點停在哪個按鈕/滑桿上，
+   空白鍵與 N 鍵一定會被接收到，不會被個別元素的監聽器攔截而遺漏拍點。
+   注意：handleTap() 必須是這個事件處理函式裡「第一個」被呼叫的動作，
+   中間不要插入 blur() 之類的額外操作，否則某些瀏覽器可能不再把後續
+   建立/恢復 AudioContext 的動作視為直接源自使用者手勢，導致完全沒聲音。 */
+document.addEventListener('keydown',function(e){
+  if(subjectId===''||document.getElementById('test-area').style.display==='none')return; // 尚未輸入受試者編號開始測驗前，不接受空白鍵/N鍵
+  if(e.code==='Space'){
+    e.preventDefault();e.stopPropagation();
+    handleTap();
+  } else if(e.key==='n'||e.key==='N'){
+    e.preventDefault();e.stopPropagation();
+    if(audioBusy)return; // 播放音檔期間不允許切換下一題
+    const bar=document.getElementById('status-bar');
+    if(bar.classList.contains('done-next')&&!bar.classList.contains('locked'))newQuestion();
+  }
+},true);
+
+function start(){
+  if(phase==='preparing'||phase==='recording')return;
+  curReactionMs=Math.round(performance.now()-questionShownAt); // 從題目顯示到現在按空白鍵開始，這段反應時間
+  userHits=[];lastMatchResult=null;clearFb();clearMissTimers();
+  showAnswerBtn(false);showMyRecordingBtn(false);
+  phase='preparing';setBar(false);setSt('預備拍…');
+  showPrepRow(true);flashDot(-1);
+  startRecording();
+  recordedBeat=BEAT;recordedTotalBeats=totalBeats; // 記住這一題實際錄製當下的設定，供「我的錄音」重播使用
+  taskStartTime=Infinity; // 等 AudioContext 暖機的這段空檔，先設成無限大，避免沿用上一題殘留的 taskStartTime 誤觸發 onHit
+  // 等 AudioContext 確認真的 running 之後，才把「現在」當作排程聲音與畫面共同的時間基準，
+  // 避免剛啟動/剛喚醒時那段音訊暖機延遲，害聲音跟綠點對不齊。
+  ensureRunning().then(()=>{
+    if(phase!=='preparing')return; // 等待期間使用者若已經取消/重來，就不要再排程
+    const a=getAC(),now=a.currentTime+0.05;
+    for(let i=0;i<4;i++){beep(i===0?880:660,now+i*BEAT,i===0?0.3:0.2,false);setTimeout(()=>flashDot(i),Math.max(0,(now+i*BEAT-a.currentTime)*1000));}
+    const taskStart=now+4*BEAT;taskStartTime=taskStart;
+    // 作答（recording）階段不排程節拍器 click，只保留前面 4 拍的預備拍；
+    // 節拍器聲音只在播放音檔（正確答案／我的錄音，見 playAnswer/playMyRecording）時才留著。
+    prepTmr=setTimeout(()=>{
+      phase='recording';setBar(true);setSt('按空白鍵拍擊');
+      showPrepRow(false);flashDot(-1);
+      if(endTmr)clearTimeout(endTmr);
+      endTmr=setTimeout(endRec,(totalBeats*BEAT+0.5)*1000);
+      scheduleMiss();
+    },Math.max(0,(taskStart-a.currentTime)*1000));
+  });
+}
+
+function onHit(){
+  const a=getAC(),t=a.currentTime-taskStartTime;
+  if(t<-BEAT/2)return; // 允許在第一拍前最多半拍的搶拍，讓它進入正常判定（可能被判太早、但不會被直接丟掉變 MISS）
+  userHits.push(t);
+  clap(a.currentTime);
+  if(!SW.live)return;
+  const r=matchAll(globalSeq(),userHits,BEAT);
+  lastMatchResult=r;
+  drawHit(r.hs[r.hs.length-1],r);
+}
+
+function endRec(){
+  phase='done';
+  clearMissTimers();
+  const r=matchAll(globalSeq(),userHits,BEAT);lastMatchResult=r;
+  clearFb();if(SW.summary||SW.syncsummary)drawAll(r);
+  showAnswerBtn(true);
+  myRecFirstDone=false;answerFirstDone=false;
+  myRecExtraClicks=0;answerExtraClicks=0;
+  reviewStartTime=Date.now(); // 從任務結束這一刻開始計「回顧時間」，直到受試者按下下一題
+  showMetacog(SW.summary||SW.syncsummary); // G1 的提示語在這裡消失；G2/G3 的提示語在這裡出現，直到按下一題
+  setTimeout(()=>stopRecording(),600); // 延遲一點讓最後音效都錄進去
+  const isLast=questionCount+1>=SESSION_TOTAL;
+  document.getElementById('status-bar').className='done-next';
+  setSt(isLast?'點此結束測驗':'下一題');
+  refreshNextBtnLock();
+}
+
+function logTapDetails(r,qNum){
+  // 記錄這一題「每一個拍點」的分類與時間差（依 節奏測驗_TP-FP-FN判定邏輯.md）：
+  // Hit(TP) → 先看絕對時間差：≦80ms 記為「準」；否則再看時間差正負：diff<0（提早打）記為「快」，diff>0（延遲打）記為「慢」；
+  //           （不論誤差多大都仍算 TP，這裡只是分類文字，不影響 TP/FP/FN 判定）
+  // 沒配對到任何未配對音符窗的拍擊（含落在休止符窗內、落空、或窗已被更早拍點配對走）→ FP，記為「多打」(無時間差，對應表格中的 X)；
+  // 音符完全沒被任何拍點配對到 → FN(Miss)
+  r.hs.forEach(h=>{
+    if(h.result==='Hit'){
+      const a=Math.abs(h.diff);
+      const cat=a<=80?'準':(h.diff<0?'快':'慢');
+      tapDetailLog.push({q:qNum,note:(h.ni>=0?h.ni+1:''),cat,ms:h.diff});
+    }else if(h.result==='FA'){
+      tapDetailLog.push({q:qNum,note:'',cat:'多打',ms:''});
+    }
+  });
+  r.nws.forEach((w,i)=>{if(w.result==='Miss')tapDetailLog.push({q:qNum,note:i+1,cat:'Miss',ms:''});});
+}
+
+function downloadTapDetailCSV(){
+  if(tapDetailLog.length===0){alert('目前還沒有任何拍點紀錄可以下載。');return;}
+  const header='組別,受試者編號,題號,拍點序號,分類,時間差ms(正=偏慢,負=偏快)';
+  const rows=tapDetailLog.map(d=>[groupId,subjectId,d.q,d.note,d.cat,d.ms].join(','));
+  const filename='tapdetail_'+(groupId||'G')+'_'+(subjectId||'data')+'.csv';
+  const blob=new Blob(['\uFEFF'+header+'\n'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const blobUrl=URL.createObjectURL(blob);
+  const link=document.createElement('a');
+  link.href=blobUrl;link.download=filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(()=>URL.revokeObjectURL(blobUrl),10000);
+}
+
+function exportCSV(){
+  if(!lastMatchResult)return;
+  questionCount++;
+  logTapDetails(lastMatchResult,questionCount);
+  const reviewMs=reviewStartTime!==null?Date.now()-reviewStartTime:'';
+  sessionLog.push({
+    q:questionCount,
+    f:parseFloat((lastMatchResult.F*100).toFixed(1)),
+    mae:lastMatchResult.MAE!==null?lastMatchResult.MAE:'',
+    rt:(curReactionMs!==null&&curReactionMs!==undefined)?curReactionMs:'',
+    review:reviewMs,
+    myRec:myRecExtraClicks,
+    ans:answerExtraClicks,
+    hit:lastMatchResult.Hit,
+    fa:lastMatchResult.FA,
+    miss:lastMatchResult.Miss
+  });
+  curReactionMs=null;
+  reviewStartTime=null;
+  myRecExtraClicks=0;answerExtraClicks=0;
+}
+
+function downloadSessionCSV(){
+  if(sessionLog.length===0){alert('目前還沒有任何一題的紀錄可以下載。');return;}
+  const header='組別,受試者編號,題號,F-score(%),MAE(ms),準備時間(ms),回顧時間(ms),我的錄音,正確答案,Hit,FA,Miss';
+  const rows=sessionLog.map(d=>[groupId,subjectId,d.q,d.f,d.mae,d.rt,d.review,d.myRec,d.ans,d.hit,d.fa,d.miss].join(','));
+  const filename='rhythm_pretest_'+(subjectId||'data')+'.csv';
+  // 用 Blob + Object URL 而非 data: URI：data: 連結搭配 target="_blank"
+  // 在部分瀏覽器會被當成「開新分頁的導覽」而非單純下載；
+  // Blob URL 搭配 a[download] 會被瀏覽器直接辨識為檔案下載。
+  const blob=new Blob(['\uFEFF'+header+'\n'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const blobUrl=URL.createObjectURL(blob);
+  const link=document.createElement('a');
+  link.href=blobUrl;link.download=filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(()=>URL.revokeObjectURL(blobUrl),10000);
+}
+
+function uploadToGoogleSheet(){
+  if(!GOOGLE_SHEET_WEBHOOK_URL){
+    setSt('⚠️ 尚未設定雲端試算表網址，資料未能上傳，請聯絡研究人員');
+    return;
+  }
+  // 對應雲端 Apps Script 的兩張表：
+  // SUMMARY_HEADER：組別,受試者編號,題號,F-score(%),MAE(ms),準備時間(ms),回顧時間(ms),我的錄音,正確答案,TP,FP,FN
+  //   （d.hit/d.fa/d.miss 就是每題的 TP/FP/FN 數量，欄位值不變、只是欄名對應成 TP/FP/FN）
+  const sessionRows=sessionLog.map(d=>[groupId,subjectId,d.q,d.f,d.mae,d.rt,d.review,d.myRec,d.ans,d.hit,d.fa,d.miss]);
+  // TAP_DETAIL_HEADER：組別,受試者編號,題號,拍點序號,分類,時間差(ms),絕對時間差(ms)
+  const tapRows=tapDetailLog.map(d=>[groupId,subjectId,d.q,d.note,d.cat,d.ms,(d.ms===''?'':Math.abs(d.ms))]);
+  fetch(GOOGLE_SHEET_WEBHOOK_URL,{
+    method:'POST',
+    mode:'no-cors', // Apps Script 的網頁應用程式沒有做 CORS 回應標頭，
+                     // 用 no-cors 送出讓瀏覽器不去檢查回應內容，資料仍會確實送達並寫入試算表。
+                     // 注意：no-cors 模式下讀不到伺服器實際的成功/失敗狀態碼，
+                     // 這裡的「成功」只代表瀏覽器確實把這次請求送出去了（沒有網路層級的錯誤）。
+    headers:{'Content-Type':'text/plain;charset=utf-8'}, // 用 text/plain 避免觸發預檢請求（preflight），
+                                                            // Apps Script 端仍可用 JSON.parse(e.postData.contents) 正常解析
+    body:JSON.stringify({sessionRows,tapRows})
+  }).then(()=>{
+    setSt('資料已上傳雲端試算表');
+  }).catch(err=>{
+    console.error('上傳到 Google Sheet 失敗：',err);
+    setSt('⚠️ 上傳失敗，請自行下載CSV檔');
+  });
+}
+
+function finishTest(){
+  if(endTmr)clearTimeout(endTmr);if(prepTmr)clearTimeout(prepTmr);
+  phase='done';document.getElementById('status-bar').className='done';
+  setSt('已結束練習，資料上傳中…');
+  document.querySelector('.score-wrap').style.display='none'; // 結束頁不需要再顯示樂譜、我的錄音／正確答案按鈕
+  showMetacog(false);
+  document.getElementById('finish-msg').style.display='block';
+  document.getElementById('csv-download-row').style.display='block'; // 全部題目都完成了，才讓「下載本機備份 CSV」按鈕出現
+  uploadToGoogleSheet(); // 資料上傳到雲端試算表；本機 CSV 改為受試者/研究人員自行按按鈕下載，不再自動跳出
+}
+
+function reset(){
+  userHits=[];lastMatchResult=null;stopMetro();
+  clearFb();clearMissTimers();stopRecording();
+  if(endTmr)clearTimeout(endTmr);if(prepTmr)clearTimeout(prepTmr);
+  phase='idle';document.getElementById('status-bar').className='';setSt('按空白鍵開始');
+  showPrepRow(false);flashDot(-1);
+  showAnswerBtn(false);showMyRecordingBtn(false);
+  showMetacog(false); // G2/G3 的提示語在這裡（換到下一題）消失
+  audioBusy=false;
+}
+function newQuestion(){
+  exportCSV();
+  if(questionCount<SESSION_TOTAL){reset();buildSeq();renderScore();markQuestionShown();}
+  else{finishTest();} // 最後一題也要按「點此結束測驗」才會進到結束頁，開始上傳資料、出現下載 CSV 按鈕
+}
+function retryQ(){reset();renderScore();markQuestionShown();}
+
+function svgEl(tag,attrs){const el=document.createElementNS('http://www.w3.org/2000/svg',tag);Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v));return el;}
+function nX(note){const bi=Math.floor(note.b/4),bib=note.b-bi*4,sl=LAYOUT.L+bi*LAYOUT.SW,il=sl+LAYOUT.IP,iw=LAYOUT.SW-LAYOUT.IP*2;return il+bib*(iw/4)+(iw/4)/2;}
+/* tX 一定要跟 renderScore() 畫音符時用的座標公式完全一致，回饋點才會真的對齊在音符正下方。
+   renderScore 是「每個小節自己一份座標」：每個小節有自己的起點（含左右內縮 IP），小節內再切成 4 等份
+   （每一拍一份）。原本 tX 是用整首曲子的時間比例去換算位置，沒有考慮到每個小節自己的內縮邊界，
+   算出來的位置會跟真正畫出來的音符位置有系統性的落差（而且每個小節都會重複發生一次），
+   所以才會看起來「視覺回饋跟樂譜對不齊」。這裡改成跟 renderScore 用同一套「小節→拍」公式反推。 */
+function tX(t){
+  const totalB=BARS*4;
+  const bGlobal=Math.min(Math.max(t/BEAT,0),totalB);
+  const bi=Math.min(Math.max(Math.floor(bGlobal/4),0),BARS-1);
+  const bLocal=Math.min(Math.max(bGlobal-bi*4,0),4);
+  const sl=LAYOUT.L+bi*LAYOUT.SW,il=sl+LAYOUT.IP,iw=LAYOUT.SW-LAYOUT.IP*2,bw=iw/4;
+  const x=il+bLocal*bw+bw/2;
+  return Math.min(Math.max(x,LAYOUT.L),LAYOUT.R);
+}
+function addFb(el){const id='fb'+Date.now()+Math.random();el.setAttribute('id',id);document.getElementById('score').appendChild(el);fbIds.push(id);}
+function clearFb(){fbIds.forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});fbIds=[];fbEvents=[];}
+function drawDot(x,col,t){const el=svgEl('circle',{cx:x,cy:LAYOUT.Y+28,r:'5.5',fill:col});if(t!==undefined){el.setAttribute('class','fb-dot');el.setAttribute('data-t',t);}addFb(el);}
+function drawX(x,t){const el=svgEl('circle',{cx:x,cy:LAYOUT.Y+28,r:'5.5',fill:'#e24b4a'});if(t!==undefined){el.setAttribute('class','fb-dot');el.setAttribute('data-t',t);}addFb(el);}
+function drawEmptyCircle(x){addFb(svgEl('circle',{cx:x,cy:LAYOUT.Y+28,r:'5.5',fill:'none',stroke:'#e24b4a','stroke-width':'2'}));}
+const DOT_GAP=13; // 同一個判定窗內，兩顆回饋圓點中心點的最小間距：避免疊在一起
+/* 保險夾線用的左右邊界：
+   注意第一個事件沒有「前一個事件」，buildRanges() 會用「虛擬前一拍（b-1）」算出一個負的時間當作 L，
+   讓 tX() 內部自己的 0 下限直接把它夾成跟這個事件的 idealT 同一個位置，這時候如果再疊加 +6 的安全間距，
+   反而會把左邊界推到比錨點本身還右邊，導致第一個音符的回饋點永遠被夾線往右頂。
+   同理最後一個事件如果超出樂曲總長，也不該用不存在的「下一個事件」邊界去夾。
+   所以：只有當 L/R 真的落在樂曲時間範圍內（代表旁邊真的有其他判定窗）時，才加上 6px 安全間距；
+   落在虛擬邊界之外（樂曲開頭之前／結尾之後）就直接用樂譜本身的絕對邊界，不做多餘的夾線。 */
+function winBounds(win){
+  const lo=win.L>1e-9?tX(win.L)+6:LAYOUT.L;
+  const hi=win.R<totalBeats*BEAT-1e-9?tX(win.R)-6:LAYOUT.R;
+  return[lo,hi];
+}
+/* 回饋位置的核心原則：以「這個判定窗自己代表的音符/休止符理想時間」為錨點（tX(win.idealT)，
+   也就是符號本身畫出來的位置）。
+   - 判為「準」（|diffMs|<=80ms，需與 logTapDetails() 的「準」門檻保持一致）：直接對齊錨點正下方，不做左右偏移。
+   - 其餘（快/慢）：以錨點為基準，依時間誤差做小幅左右微調（早的偏左、晚的偏右），
+     而不是直接用原始拍擊時間去換算座標。
+   原因：判定窗的寬度是用「跟前後音符的中點」切出來的，遇到前面接著休止符、或前一個音符時值較長時，
+   窗本身可能很寬——如果直接用原始拍擊時間換算位置，落在窗的邊緣附近時，畫出來的點會離它真正
+   對應的音符符號很遠，看起來就會像「上面根本沒有對應的符號」一樣，容易誤導。用錨點＋小幅偏移，
+   才能保證不管窗多寬，回饋點永遠緊貼在它所屬的那個音符/休止符正下方一小段範圍內，同時仍然保留
+   「早出現在左、晚出現在右」的方向性；最後再用窗自己的 [L,R] 邊界做一次保險夾線，
+   確保無論如何都不會被畫到別人的判定窗裡。 */
+function eventX(t,win){
+  if(!win)return tX(t); // 極少數完全落在所有判定窗之外的邊界情況，沒有錨點可用，退回原始時間位置
+  const anchor=tX(win.idealT);
+  const diffMs=(t-win.idealT)*1000;
+  const[lo,hi]=winBounds(win);
+  if(Math.abs(diffMs)<=80)return(hi>lo)?Math.min(Math.max(anchor,lo),hi):anchor; // 準：對齊音符正下方，不偏移
+  const cap=Math.min(24,LAYOUT.SW/4*0.35); // 局部微調的最大位移量
+  const norm=Math.max(-1,Math.min(1,diffMs/300));
+  let x=anchor+norm*cap;
+  if(hi>lo)x=Math.min(Math.max(x,lo),hi);
+  return x;
+}
+function renderFb(){
+  fbIds.forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
+  fbIds=[];
+  const sorted=[...fbEvents].sort((a,b)=>a.ord-b.ord||a.t-b.t);
+  let prevOrd=null,prevX=-Infinity;
+  sorted.forEach(e=>{
+    let cx=e.x;
+    if(e.ord===prevOrd)cx=Math.max(cx,prevX+DOT_GAP); // 只跟「同一個窗」裡上一顆比，換到新窗就重新開始
+    if(e.win){
+      const[lo,hi]=winBounds(e.win); // 保險夾線，絕不超出這個窗自己的邊界
+      if(hi>lo)cx=Math.min(Math.max(cx,lo),hi);
+    }
+    prevX=cx;prevOrd=e.ord;
+    if(e.kind==='dot')drawDot(cx,e.col,e.t);
+    else if(e.kind==='x')drawX(cx,e.t);
+    else drawEmptyCircle(cx);
+  });
+}
+function addFbEvent(ord,t,x,kind,col,win){fbEvents.push({ord,t,x,kind,col,win});renderFb();}
+function drawHit(h,r){
+  // 即時回饋：單一拍擊當下立刻加入一筆事件並依樂譜順序重新排序畫出
+  const win=r.evts[h.ord];
+  addFbEvent(h.ord,h.t,eventX(h.t,win),h.result==='Hit'?'dot':'x',h.color,win);
+}
+function drawAll(r){
+  clearFb();
+  if(!r)return;
+  fbEvents=[
+    ...r.hs.map(h=>{const win=r.evts[h.ord];return{ord:h.ord,t:h.t,x:eventX(h.t,win),kind:h.result==='Hit'?'dot':'x',col:h.color,win};}),
+    ...r.nws.filter(w=>w.result==='Miss').map(w=>({ord:w.idx,t:w.idealT,x:tX(w.idealT),kind:'empty',win:w}))
+  ];
+  renderFb();
+}
+function scheduleMiss(){
+  const seq=globalSeq(),evts=buildRanges(seq,BEAT),notes=evts.filter(e=>!e.r),a=getAC();
+  notes.forEach(nw=>{
+    const ms=Math.max(0,(taskStartTime+nw.R-a.currentTime)*1000);
+    const t=setTimeout(()=>{if(phase!=='recording')return;const r=matchAll(globalSeq(),userHits,BEAT);const m=r.nws.find(w=>w.b===nw.b&&w.d===nw.d&&!nw.r);if(SW.live&&m&&m.result==='Miss')addFbEvent(nw.idx,nw.idealT,tX(nw.idealT),'empty',undefined,nw);},ms);
+    missTimers.push(t);
+  });
+}
+function clearMissTimers(){missTimers.forEach(t=>clearTimeout(t));missTimers=[];}
+/* 正確答案：需等我的錄音播完才能點；播完後灰色禁用 */
+function playAnswer(){
+  const btn=document.getElementById('play-answer-btn');
+  if(btn.disabled||audioBusy)return;
+  audioBusy=true;
+  refreshNextBtnLock();
+  const myBtn=document.getElementById('my-recording-btn');
+  btn.disabled=true;myBtn.disabled=true; // 播放期間鎖住雙方，避免疊播
+  btn.textContent='播放中…';
+
+  const a=getAC(),now=a.currentTime+0.1;
+  for(let i=0;i<4;i++)beep(i===0?880:660,now+i*BEAT,i===0?0.3:0.2,false);
+  const s=now+4*BEAT;
+  for(let i=0;i<totalBeats;i++)beep((i%4===0)?660:440,s+i*BEAT,(i%4===0)?0.2:0.12,false);
+  globalSeq().filter(n=>!n.r).forEach(n=>clap(s+n.b*BEAT));
+
+  const dur=(4+totalBeats)*BEAT*1000+300;
+  setTimeout(()=>{
+    btn.textContent='▶ 正確答案';
+    audioBusy=false;
+    if(!answerFirstDone){
+      answerFirstDone=true;
+    } else {
+      answerExtraClicks++;
+    }
+    syncPlaybackButtons();
+    refreshNextBtnLock();
+  },dur);
+}
+/* 我的錄音：用當初記錄下來的真實打拍秒數（userHits）即時重新排程播放，
+   而不是把錄音壓縮存檔後再解碼播放——跟「正確答案」用同一種直接排程的
+   做法，兩者才會是一致、可信賴的時間基準。 */
+function playMyRecording(){
+  if(!userHits||userHits.length===0)return;
+  const btn=document.getElementById('my-recording-btn');
+  if(btn.disabled||audioBusy)return;
+  audioBusy=true;
+  refreshNextBtnLock();
+  const ansBtn=document.getElementById('play-answer-btn');
+  btn.disabled=true;ansBtn.disabled=true; // 播放期間鎖住雙方，避免疊播
+  btn.textContent='播放中…';
+
+  const ctx=getAC();
+  const now=ctx.currentTime+0.05;
+  const startTime=now;
+  const INTRO=4*recordedBeat; // 前奏（數拍1-2-3-4）長度
+  for(let i=0;i<4;i++)beep(i===0?880:660,now+i*recordedBeat,i===0?0.3:0.2,false);
+  const s=now+INTRO;
+  for(let i=0;i<recordedTotalBeats;i++)beep((i%4===0)?660:440,s+i*recordedBeat,(i%4===0)?0.2:0.12,false);
+  userHits.forEach(t=>clap(s+t));
+
+  // 終點同步回饋 cueing
+  const syncOn=SW['syncsummary'];
+  let cueRaf=null;
+  if(syncOn&&lastMatchResult){
+    const dots=document.querySelectorAll('.fb-dot');
+    const DOT_R=5.5,CUE_R=7.5;
+    function cueFrame(){
+      const elapsed=ctx.currentTime-startTime-INTRO;
+      dots.forEach(d=>{
+        const dt=parseFloat(d.getAttribute('data-t'));
+        const active=Math.abs(elapsed-dt)<0.12;
+        d.setAttribute('r',active?CUE_R:DOT_R);
+      });
+      cueRaf=requestAnimationFrame(cueFrame);
+    }
+    cueRaf=requestAnimationFrame(cueFrame);
+  }
+
+  const lastHitT=userHits[userHits.length-1];
+  const tailEnd=Math.max(recordedTotalBeats*recordedBeat,lastHitT+0.2);
+  const dur=(INTRO+tailEnd)*1000+300;
+  setTimeout(()=>{
+    if(cueRaf)cancelAnimationFrame(cueRaf);
+    document.querySelectorAll('.fb-dot').forEach(d=>d.setAttribute('r','5.5'));
+    btn.textContent='🎙 我的錄音';
+    audioBusy=false;
+    if(!myRecFirstDone){
+      myRecFirstDone=true;
+    } else {
+      myRecExtraClicks++;
+    }
+    syncPlaybackButtons();
+    refreshNextBtnLock();
+  },dur);
+}
+function renderScore(){
+  const svg=document.getElementById('score');svg.innerHTML='';
+  const SW_=280,TS=56,END=40,H=115,LY=65,ST=LY-34,IP=16; // 小節格子加寬（原本 202），音符間距變大，讓 Hit 的偏早/偏晚位移實際看得出來
+  const W=TS+SW_*BARS+END;
+  const NL=TS,NR=NL+SW_*BARS;
+  LAYOUT.Y=LY;LAYOUT.L=NL;LAYOUT.R=NR;LAYOUT.SW=SW_;LAYOUT.IP=IP;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('width',W);svg.setAttribute('height',H);
+  function E(tag,attrs){return svgEl(tag,attrs);}
+  function line(x1,y1,x2,y2,sw){svg.appendChild(E('line',{x1,y1,x2,y2,stroke:'#111','stroke-width':sw,'stroke-linecap':'square'}));}
+  const t1=E('text',{x:NL-16,y:LY-3,fill:'#111','font-size':'13','font-weight':'bold','font-family':'serif','text-anchor':'middle'});t1.textContent='4';svg.appendChild(t1);
+  const t2=E('text',{x:NL-16,y:LY+13,fill:'#111','font-size':'13','font-weight':'bold','font-family':'serif','text-anchor':'middle'});t2.textContent='4';svg.appendChild(t2);
+  curBars.forEach((bar,bi)=>{
+    const sl=NL+bi*SW_,il=sl+IP,iw=SW_-IP*2;
+    function nx(b){const bw=iw/4;return il+b*bw+bw/2;}
+    let i=0;
+    while(i<bar.length){
+      const n=bar[i],cx=nx(n.b);
+      if(n.d===1&&!n.r){svg.appendChild(E('ellipse',{cx,cy:LY,rx:'7',ry:'5',fill:'#111',transform:`rotate(-15,${cx},${LY})`}));svg.appendChild(E('line',{x1:cx+6,y1:LY-2,x2:cx+6,y2:ST,stroke:'#111','stroke-width':'1.8','stroke-linecap':'round'}));i++;}
+      else if(n.d===1&&n.r){const t=E('text',{x:cx,y:LY,'font-family':'"NotoMusic",serif','font-size':'38',fill:'#111','text-anchor':'middle','dominant-baseline':'middle'});t.textContent='\uD834\uDD3D';svg.appendChild(t);i++;}
+      else if(n.d===0.5&&n.r){const t=E('text',{x:cx,y:LY+8,'font-family':'"NotoMusic",serif','font-size':'38',fill:'#111','text-anchor':'middle','dominant-baseline':'middle'});t.textContent='\uD834\uDD3E';svg.appendChild(t);i++;}
+      else if(n.d===0.5&&!n.r){
+        const beatOf=Math.floor(n.b);let j=i+1;while(j<bar.length&&bar[j].d===0.5&&!bar[j].r&&Math.floor(bar[j].b)===beatOf)j++;
+        const grp=bar.slice(i,j),sxs=[];
+        grp.forEach(gn=>{const gcx=nx(gn.b),sx=gcx+6;svg.appendChild(E('ellipse',{cx:gcx,cy:LY,rx:'7',ry:'5',fill:'#111',transform:`rotate(-15,${gcx},${LY})`}));svg.appendChild(E('line',{x1:sx,y1:LY-2,x2:sx,y2:ST,stroke:'#111','stroke-width':'1.8','stroke-linecap':'round'}));sxs.push(sx);});
+        if(grp.length===1){svg.appendChild(E('path',{d:`M${sxs[0]},${ST} C${sxs[0]+14},${ST+8} ${sxs[0]+12},${ST+18} ${sxs[0]+4},${ST+22}`,fill:'none',stroke:'#111','stroke-width':'2','stroke-linecap':'round'}));}
+        else{svg.appendChild(E('line',{x1:sxs[0],y1:ST,x2:sxs[sxs.length-1],y2:ST,stroke:'#111','stroke-width':'5','stroke-linecap':'butt'}));}
+        i=j;
+      }else i++;
+    }
+  });
+  line(NL,LY,NR,LY,'1.8');
+  line(NL,LY-22,NL,LY+22,'1.5');
+  for(let b=1;b<BARS;b++){const bx=NL+b*SW_;line(bx,LY-22,bx,LY+22,'1.2');}
+  line(NR+2,LY-22,NR+2,LY+22,'1.5');
+  line(NR+8,LY-22,NR+8,LY+22,'5');
+}
+
+// 頁面載入時預設套用 DEFAULT_QUESTION_SET（習得階段題目.json），行為與使用者手動載入自訂題目檔相同：
+// 固定按題組出題、鎖住小節數調整、狀態列顯示題組名稱與題數；使用者仍可按「回到隨機出題」切回隨機，
+// 或透過設定面板另外載入別的自訂題目檔覆蓋。
+try{
+  const preset=parseCustomFile(DEFAULT_QUESTION_SET);
+  customQuestions=preset;
+  customSetName=DEFAULT_QUESTION_SET.name;
+  SESSION_TOTAL=preset.length;
+  document.getElementById('custom-q-status').textContent='目前：預設題組「'+customSetName+'」（共 '+preset.length+' 題）';
+  document.getElementById('custom-q-clear').style.display='inline-block';
+  setBarStepperEnabled(false);
+}catch(e){console.error('預設題組載入失敗',e);}
+
+buildSeq();renderScore();
+document.fonts.load('38px NotoMusic').then(()=>renderScore()).catch(()=>{});
+</script>
+</body></html>
